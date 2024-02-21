@@ -93,6 +93,10 @@ float complexDistance(Complex a, Complex b){
     return complexLength(dist);
 }
 
+Complex createComplex(float real, float imaginary){
+    return Complex(Real(real),Imaginary(imaginary));
+}
+
 //////// ALGERBA
 //a root is a representation of x-c, so when you multiply roots, 
 // you return (x-c1)(x-c2) = x^2 + -(c1+c2) + c1c2
@@ -370,10 +374,51 @@ vec3 rgb(int r, int g, int b){
     return vec3(float(r)/255., float(g)/255., float(b)/255. );
 }
 
+Complex lerp(Complex a, Complex b, float t){
+    t = clamp(t,0.,1.);
+    Complex diff = subtractComplex(b,a);
+    // Complex scalar = Complex(
+    //     Real(t),
+    //     Imaginary(0.)
+    // );
+    Complex scalar = createComplex(
+        diff.realValue.value * t,
+    // diff.imaginaryValue.value * t
+        0.
+    );
+
+    Complex result = createComplex(
+        a.realValue.value + diff.realValue.value * t,
+        a.imaginaryValue.value + diff.imaginaryValue.value * t
+    );
+
+    return result;
+
+    return addComplex(multiplyComplex(diff,scalar),a);
+}
+
+Complex bezier2(Complex start, Complex s1, Complex end, float t){
+    Complex inter01 = lerp(start,s1,t);
+    Complex inter02 = lerp(s1,end,t);
+    Complex inter11 = lerp(inter01,inter02,t);
+    return inter11;
+}
+
+Complex bezier3(Complex start, Complex s1, Complex s2, Complex end, float t){
+    Complex inter01 = lerp(start,s1,t);
+    Complex inter02 = lerp(s1,s2,t);
+    Complex inter03 = lerp(s2,end,t);
+
+    Complex inter11 = lerp(inter01,inter02,t);
+    Complex inter12 = lerp(inter02,inter03,t);
+
+    Complex inter21 = lerp(inter11, inter12,t);
+    return inter21;
+}
+
 vec3 NewtonsMethod(Complex complexCoord, Root a, Root b, Root c, Root d, Root e){
     Polynomial P = createPolynomial(a,b,c,d,e);
     P = createPolynomial(b,c,d,e);
-    // P = createPolynomial(a,b,c,d);
     // P = createPolynomial(a,b,c);
 
     vec3 colorA = rgb(113,128,172);
@@ -400,7 +445,7 @@ vec3 NewtonsMethod(Complex complexCoord, Root a, Root b, Root c, Root d, Root e)
     float distE = complexLength(subtractComplex(z,e.c));
     // float minDist = min(min(min(distA,distB),distC),distD);
     float minDist = min(min(min(distB,distC),distD),distE);
-
+    int num = 0xff;
     // float minDist = min(min(min(min(distA,distB),distC),distD),distE);
 
     // if (minDist == distA){
@@ -427,11 +472,57 @@ vec3 graph(vec2 uv){
     Complex complexCoord = Complex(Real(uv.x),Imaginary(uv.y));
 
     Root a = createRoot(6.0,0.0);
-    Root b = createRoot(-6.,-3.0 - sin(u_time));
-    Root c = createRoot(-6.,3.0 + 1.1 * sin( 0.5 * u_time));
-    Root d = createRoot(2. + 2. * cos(u_time * 0.5),4. - sin(u_time * 2.));
-    Root e = createRoot(2. + 2. * cos(u_time * 0.6),-4. + sin(u_time * 0.3));
 
+    // Root b = createRoot(-6.,-3.0);
+    Root b = createRoot(-6.,-3.0 - sin(u_time));
+
+    // Root c = createRoot(-6.,3.0);
+    Root c = createRoot(-6.,3.0 + 1.1 * sin( 0.5 * u_time));
+    
+
+    // Root d = createRoot(2.,4.);
+    Root d = createRoot(2. + 2. * cos(u_time * 0.5),4. - sin(u_time * 2.));
+
+    // Root e = createRoot(2.,-4.);
+    Root e = createRoot(
+        d.c.realValue.value + 5. * cos(u_time),
+        d.c.imaginaryValue.value + 5. * sin(u_time)
+    );
+
+    // Root e = createRoot(2. + 2. * cos(u_time * 0.6),-4. + sin(u_time * 0.3));
+
+    // Root c = createRoot(
+    //     e.c.realValue.value + 7. * cos(u_time * 1.5),
+    //     e.c.imaginaryValue.value + 7. * sin(u_time * 1.5)
+    // );
+
+    // b.c = lerp(
+    //     createComplex(-6.,-3.0),
+    //     createComplex(-6.,3.0),
+    //     abs(sin(u_time))
+    // );
+
+    b.c = bezier3(
+        // createComplex(-6.,-3.0),
+        createComplex(sin(1.1 * u_time)*sin(u_time), cos(u_time * 0.9)),
+        e.c,
+        d.c,
+        addComplex(c.c, createComplex(sin(u_time),cos(u_time))),
+        abs(sin(u_time))
+    );
+
+    c.c = bezier2(
+        addComplex(e.c, createComplex(5. * sin(u_time), 4.5 * cos(u_time * 0.6))),
+        d.c,
+        addComplex(b.c,createComplex(sin(-u_time), 3. * cos(u_time)*cos(0.8 * u_time))),
+        abs(sin(u_time * 0.6))
+    );
+
+    // b.c = lerp(
+    //     createComplex(-1.,0.),
+    //     createComplex(1.0,0.),
+    //     sin(u_time)
+    // );
 
     if (complexDistance(complexCoord,emptyComplex()) < 0.2){
         return vec3(1.0, 0.4706, 0.4706);
@@ -459,7 +550,7 @@ vec3 graph(vec2 uv){
 void main(){
     vec2 uv = vec2(2. * (gl_FragCoord.xy/ u_resolution)-1.);
 
-    float graphScale = 15.;
+    float graphScale = 20.;
     vec2 cameraPos = vec2(-0,0.025);
     //* (1./exp(0.4 * u_time))
     vec2 cameraView = (graphScale * (1./exp(0.4 * u_time))) * uv + cameraPos;
@@ -468,3 +559,37 @@ void main(){
 
     gl_FragColor = vec4(color,1.);
 }
+
+//COLORS
+/*
+    mechanical keyboard / navy blue, teal, brown, orange
+    vec3 colorA = rgb(113,128,172);
+    vec3 colorB = rgb(43,69,112);
+    vec3 colorC = rgb(168,208,219);
+    vec3 colorD = rgb(228,146,115);
+    vec3 colorE = rgb(163,122,116);
+
+    wines
+    vec3 colorA = rgb(91,35,51);
+    vec3 colorB = rgb(247,244,243);
+    vec3 colorC = rgb(86,77,74);
+    vec3 colorD = rgb(242,67,51);
+    vec3 colorE = rgb(186,27,29);
+
+    https://coolors.co/e2d4b7-9c9583-a1a499-b0bbbf-cadbc8
+    vec3 colorA = rgb(226,212,183);
+    vec3 colorB = rgb(156,149,131);
+    vec3 colorC = rgb(161,164,153);
+    vec3 colorD = rgb(176,187,191);
+    vec3 colorE = rgb(202,219,200);
+
+    https://coolors.co/5b507a-5b618a-9eadc8-b9e28c-d6d84f
+
+    https://coolors.co/818d92-586a6a-b9a394-d4c5c7-dad4ef
+
+    https://coolors.co/040f0f-248232-2ba84a-2d3a3a-fcfffc
+
+    https://coolors.co/131515-2b2c28-339989-7de2d1-fffafb
+
+    https://coolors.co/f46036-5b85aa-414770-372248-171123
+*/
